@@ -1,0 +1,126 @@
+
+import pandas as pd
+import numpy as np
+import pubchempy as pcp
+
+from statsmodels.api import add_constant
+from sklearn import linear_model
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+
+
+#Function to obtain smiles for each chemical in the dataset
+def get_smiles (sol):
+    p=sol['CAS']
+    o=0
+    sm=[]
+    
+    for x in sol['CAS']:
+        try:
+            results = pcp.get_compounds(p[o], 'name')
+    
+            ik=(results[0].canonical_smiles)
+    
+            sm.append(ik)
+            o=o+1
+        
+        except IndexError:
+            sm.append('None')
+            o=o+1
+    
+    global df2
+    df2 = sol.assign(SMILES=sm)
+
+
+    #Removes values where SMILES was not obtained
+    df2=df2[~df2.eq("None").any(1)]
+
+
+#Function that obtains 29 molecular descriptors from PubChem
+def get_descriptors():
+    global propdata
+    propdata=[]
+    for i in df2['SMILES']:
+        props=pcp.get_properties([ 'MolecularWeight', 'XLogP', 'ExactMass', 'MonoisotopicMass', 'TPSA', 'Complexity', 
+                'Charge','HBondDonorCount','HBondAcceptorCount','RotatableBondCount','HeavyAtomCount', 
+                'IsotopeAtomCount', 'AtomStereoCount', 'BondStereoCount', 'CovalentUnitCount'
+                'Volume3D', 'XStericQuadrupole3D', 'YStericQuadrupole3D', 'ZStericQuadrupole3D',
+                'FeatureCount3D', 'FeatureAcceptorCount3D', 'FeatureDonorCount3D', 
+                'FeatureAnionCount3D', 'FeatureCationCount3D', 'FeatureRingCount3D', 
+                'FeatureHydrophobeCount3D', 'ConformerModelRMSD3D','EffectiveRotorCount3D', 'ConformerCount3D'], i,'smiles')
+        
+        propdata.append(props)
+    
+    rows=[]
+    columns = propdata[0][0].keys()
+
+    p=0
+    for x in df2['SMILES']:
+        rows.append(propdata[p][0].values())
+        p=p+1
+    
+    global props_df2
+    props_df2 = pd.DataFrame(data=rows, columns=columns) 
+    
+
+
+#Function for calculating the r2, MSE, MAE and intercept of the molecular descriptors
+#Must pass y variable as: df2['COLUMN NAME']
+def calc_descriptors (y_variable):
+    o=0
+    p=0
+    for x in df2['SMILES']:
+        try:
+            f=props_df2.columns[o]
+
+            x=np.array(props_df2.iloc[:,p])
+            y=np.array(y_variable)
+            x=x.reshape(-1,1)
+    
+    
+    
+
+            x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=1)
+    
+            lr=LinearRegression()
+    
+            lr.fit(x_train, y_train)
+    
+            y_pred= lr.predict(x_test)
+
+    
+    
+            r2 = r2_score(y_test,y_pred)
+            mse = mean_squared_error(y_test,y_pred)
+            mae = mean_absolute_error(y_test,y_pred)
+
+            print('\n', 'Molecular descriptor: ', f)
+            print('r2 score : ', r2)
+            print('Mean Squared Error : ', mse)
+            print('Mean Absolute Error : ', mae)
+    
+            p=p+1
+            o=o+1
+        
+        except IndexError:
+            break
+    
+
+#Must pass csv file in this fomat: pd.read_csv('DATAFILE.csv')
+#e.g. get_smiles(pd.read_csv('MockData.csv'))
+#Takes about 0.5 seconds per chemical in the dataset to run
+
+
+
+#Takes about 2 seconds per chemical in the dataset to run
+get_descriptors()
+
+#Must pass y variable as: df2['COLUMN NAME']
+#e.g. calc_descriptors(df2['Calculated pEC50'])
+
+
+
+
+
+
